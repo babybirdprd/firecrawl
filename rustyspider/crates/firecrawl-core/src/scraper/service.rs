@@ -1,4 +1,4 @@
-use crate::scraper::{Scraper, ScrapeOptions, ScrapeResult, DocumentFormat};
+use crate::scraper::{Scraper, ScrapeOptions, ScrapeResult, DocumentFormat, ExtractOptions};
 use crate::scraper::http::HttpScraper;
 use crate::scraper::browser::BrowserScraper;
 use crate::html::{transform_html, TransformHtmlOptions, extract_metadata, extract_links};
@@ -87,7 +87,23 @@ impl ScrapeService {
             result.raw_html = Some(raw_html);
         }
 
+        // 5. LLM Extraction (Placeholder)
+        if let Some(extract_opts) = options.extract {
+            result.extract = Some(self.extract_structured_data(&cleaned_html, extract_opts).await?);
+        }
+
         Ok(result)
+    }
+
+    async fn extract_structured_data(&self, _html: &str, options: ExtractOptions) -> anyhow::Result<serde_json::Value> {
+        tracing::info!("Extracting structured data with schema: {:?}", options.schema);
+        // In a real implementation, this would call OpenAI or another LLM.
+        // For now, we return a mock value to demonstrate the pipeline.
+        Ok(serde_json::json!({
+            "success": true,
+            "data": {},
+            "warning": "LLM extraction is currently a placeholder"
+        }))
     }
 }
 
@@ -114,6 +130,8 @@ mod tests {
             headers: None,
             viewport: None,
             block_resources: false,
+            actions: vec![],
+            extract: None,
         };
 
         // We won't actually call scrape() here because it might fail due to no internet/browser

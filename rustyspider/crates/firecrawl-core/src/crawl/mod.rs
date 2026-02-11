@@ -50,6 +50,20 @@ impl CrawlManager {
         }
     }
 
+    pub async fn set_robots_txt(&self, crawl_id: &str, robots_txt: &str) -> anyhow::Result<()> {
+        let mut conn = self.pool.get().await?;
+        let key = format!("firecrawl:crawl:{}:robots", crawl_id);
+        let _: () = conn.set(key, robots_txt).await?;
+        Ok(())
+    }
+
+    pub async fn get_robots_txt(&self, crawl_id: &str) -> anyhow::Result<Option<String>> {
+        let mut conn = self.pool.get().await?;
+        let key = format!("firecrawl:crawl:{}:robots", crawl_id);
+        let robots_txt: Option<String> = conn.get(key).await?;
+        Ok(robots_txt)
+    }
+
     pub async fn lock_url(&self, crawl_id: &str, url: &str) -> anyhow::Result<bool> {
         let mut conn = self.pool.get().await?;
         let key = format!("firecrawl:crawl:{}:visited", crawl_id);

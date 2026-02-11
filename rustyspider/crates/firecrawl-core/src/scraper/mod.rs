@@ -7,6 +7,33 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Action {
+    Wait {
+        milliseconds: Option<u64>,
+        selector: Option<String>,
+    },
+    Click {
+        selector: String,
+    },
+    Screenshot,
+    WriteText {
+        selector: String,
+        text: String,
+    },
+    Press {
+        key: String,
+    },
+    Scroll {
+        direction: String,
+        amount: Option<u32>,
+    },
+    Hover {
+        selector: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WaitFor {
     Selector(String),
     Time(u64), // milliseconds
@@ -16,6 +43,13 @@ pub enum WaitFor {
 pub struct Viewport {
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractOptions {
+    pub schema: serde_json::Value,
+    pub system_prompt: Option<String>,
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,6 +80,9 @@ pub struct ScrapeOptions {
     pub viewport: Option<Viewport>,
     #[serde(default)]
     pub block_resources: bool,
+    #[serde(default)]
+    pub actions: Vec<Action>,
+    pub extract: Option<ExtractOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -59,6 +96,7 @@ pub struct ScrapeResult {
     pub links: Option<Vec<String>>,
     pub status_code: Option<u16>,
     pub metadata: Option<serde_json::Value>,
+    pub extract: Option<serde_json::Value>,
     pub warning: Option<String>,
 }
 
@@ -86,6 +124,8 @@ mod tests {
             headers: None,
             viewport: None,
             block_resources: false,
+            actions: vec![],
+            extract: None,
         };
         // Verify it implements Scraper trait
         let _scraper_trait: &dyn Scraper = &scraper;
