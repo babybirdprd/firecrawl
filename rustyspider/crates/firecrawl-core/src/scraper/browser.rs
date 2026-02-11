@@ -2,7 +2,7 @@ use super::{Action, DocumentFormat, Scraper, ScrapeOptions, ScrapeResult, WaitFo
 use async_trait::async_trait;
 use chromiumoxide::{Browser, BrowserConfig, Page};
 use chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams;
-use chromiumoxide::cdp::browser_protocol::network::SetBlockedUrLsParams;
+use chromiumoxide::cdp::browser_protocol::network::{Headers, SetBlockedUrLsParams, SetExtraHttpHeadersParams};
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -156,6 +156,14 @@ impl BrowserScraper {
                 .height(viewport.height as i64)
                 .device_scale_factor(1.0)
                 .mobile(false)
+                .build()
+                .map_err(|e| anyhow::anyhow!(e))?;
+            page.execute(params).await?;
+        }
+
+        if let Some(headers) = &options.headers {
+            let params = SetExtraHttpHeadersParams::builder()
+                .headers(Headers::new(serde_json::to_value(headers).map_err(|e| anyhow::anyhow!(e))?))
                 .build()
                 .map_err(|e| anyhow::anyhow!(e))?;
             page.execute(params).await?;

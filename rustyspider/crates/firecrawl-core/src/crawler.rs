@@ -215,6 +215,20 @@ fn is_external_main_page(url_str: &str) -> bool {
   }
 }
 
+/// Extract sitemap URLs from robots.txt content.
+pub fn extract_sitemaps_from_robots(robots_txt: &str) -> Vec<String> {
+  if robots_txt.is_empty() {
+    return Vec::new();
+  }
+
+  // Sitemaps are independent of the user-agent, so we can use a generic one.
+  if let Ok(robot) = Robot::new("FirecrawlAgent", robots_txt.as_bytes()) {
+    return robot.sitemaps.iter().cloned().collect();
+  }
+
+  Vec::new()
+}
+
 fn _filter_links(data: FilterLinksCall) -> std::result::Result<FilterLinksResult, String> {
   let limit = data.limit.map_or(usize::MAX, |x| x.max(0) as usize);
   if limit == 0 {
