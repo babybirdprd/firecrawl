@@ -1,5 +1,6 @@
 pub mod http;
 pub mod browser;
+pub mod service;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -17,9 +18,28 @@ pub struct Viewport {
     pub height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum DocumentFormat {
+    Markdown,
+    Html,
+    RawHtml,
+    Screenshot,
+    Links,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScrapeOptions {
     pub url: String,
+    #[serde(default)]
+    pub formats: Vec<DocumentFormat>,
+    #[serde(default)]
+    pub only_main_content: bool,
+    #[serde(default)]
+    pub include_tags: Vec<String>,
+    #[serde(default)]
+    pub exclude_tags: Vec<String>,
     pub timeout: Option<u64>, // milliseconds
     pub wait_for: Option<WaitFor>,
     pub headers: Option<HashMap<String, String>>,
@@ -28,12 +48,18 @@ pub struct ScrapeOptions {
     pub block_resources: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ScrapeResult {
     pub url: String,
-    pub content: String,
+    pub markdown: Option<String>,
+    pub html: Option<String>,
+    pub raw_html: Option<String>,
+    pub screenshot: Option<Vec<u8>>,
+    pub links: Option<Vec<String>>,
     pub status_code: Option<u16>,
     pub metadata: Option<serde_json::Value>,
+    pub warning: Option<String>,
 }
 
 #[async_trait]
@@ -51,6 +77,10 @@ mod tests {
         let scraper = HttpScraper::new();
         let _options = ScrapeOptions {
             url: "https://example.com".to_string(),
+            formats: vec![],
+            only_main_content: false,
+            include_tags: vec![],
+            exclude_tags: vec![],
             timeout: None,
             wait_for: None,
             headers: None,

@@ -126,9 +126,9 @@ impl BrowserScraper {
 
         Ok(ScrapeResult {
             url: options.url.clone(),
-            content,
+            raw_html: Some(content),
             status_code: None, // chromiumoxide doesn't easily give status code on page.goto?
-            metadata: None,
+            ..Default::default()
         })
     }
 }
