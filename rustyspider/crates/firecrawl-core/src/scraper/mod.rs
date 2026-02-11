@@ -28,7 +28,7 @@ pub enum DocumentFormat {
     Links,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ScrapeOptions {
     pub url: String,
