@@ -36,12 +36,12 @@ The migration will be performed in phases, prioritizing core functionality.
 - [x] Set up logging/tracing.
 
 ### Phase 2: Scraping Engine (The "Hard Part")
--   Implement `BrowserScraper` using `chromiumoxide`.
-    -   Browser lifecycle management.
-    -   Page navigation, content retrieval.
+- [x] Implement `BrowserScraper` using `chromiumoxide`.
+    - [x] Browser lifecycle management.
+    - [x] Page navigation, content retrieval.
     -   Proxy support.
-    -   Ad/Tracker blocking (network interception).
--   Implement `HttpScraper` using `reqwest`.
+    - [x] Ad/Tracker blocking (network interception).
+- [x] Implement `HttpScraper` using `reqwest`.
 
 ### Phase 3: Content Processing
 - [x] Port HTML cleaning logic from `apps/api/native`.
