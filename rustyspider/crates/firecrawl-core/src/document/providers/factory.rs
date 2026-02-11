@@ -4,6 +4,7 @@ use super::odt::OdtProvider;
 use super::rtf::RtfProvider;
 use super::DocumentProvider;
 use super::xlsx::XlsxProvider;
+use super::html::HtmlProvider;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentType {
@@ -12,6 +13,7 @@ pub enum DocumentType {
   Rtf,
   Odt,
   Xlsx,
+  Html,
 }
 
 pub struct ProviderFactory {
@@ -20,6 +22,7 @@ pub struct ProviderFactory {
   rtf_provider: RtfProvider,
   odt_provider: OdtProvider,
   xlsx_provider: XlsxProvider,
+  html_provider: HtmlProvider,
 }
 
 impl ProviderFactory {
@@ -30,6 +33,7 @@ impl ProviderFactory {
       rtf_provider: RtfProvider::new(),
       odt_provider: OdtProvider::new(),
       xlsx_provider: XlsxProvider::new(),
+      html_provider: HtmlProvider::new(),
     }
   }
 
@@ -40,6 +44,7 @@ impl ProviderFactory {
       DocumentType::Rtf => &self.rtf_provider,
       DocumentType::Odt => &self.odt_provider,
       DocumentType::Xlsx => &self.xlsx_provider,
+      DocumentType::Html => &self.html_provider,
     }
   }
 }

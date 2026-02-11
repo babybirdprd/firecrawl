@@ -5,6 +5,7 @@ use std::error::Error;
 pub mod doc;
 pub mod docx;
 pub mod factory;
+pub mod html;
 pub mod odt;
 pub mod rtf;
 pub mod xlsx;
