@@ -1,8 +1,8 @@
-use super::{Scraper, ScrapeOptions, ScrapeResult, WaitFor};
+use super::{Action, DocumentFormat, Scraper, ScrapeOptions, ScrapeResult, WaitFor};
 use async_trait::async_trait;
 use chromiumoxide::{Browser, BrowserConfig, Page};
-use chromiumoxide::cdp::browser_protocol::network::SetBlockedUrLsParams;
 use chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams;
+use chromiumoxide::cdp::browser_protocol::network::SetBlockedUrLsParams;
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -69,7 +69,12 @@ impl BrowserScraper {
         })
     }
 
-    async fn wait_for_selector(&self, page: &Page, selector: &str, timeout_ms: u64) -> anyhow::Result<()> {
+    async fn wait_for_selector(
+        &self,
+        page: &Page,
+        selector: &str,
+        timeout_ms: u64,
+    ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
         let timeout = Duration::from_millis(timeout_ms);
         let mut delay = Duration::from_millis(50);
@@ -83,6 +88,53 @@ impl BrowserScraper {
         }
 
         Err(anyhow::anyhow!("Timeout waiting for selector: {}", selector))
+    }
+
+    async fn execute_action(
+        &self,
+        page: &Page,
+        action: &Action,
+        timeout_ms: u64,
+    ) -> anyhow::Result<()> {
+        match action {
+            Action::Wait {
+                milliseconds,
+                selector,
+            } => {
+                if let Some(ms) = milliseconds {
+                    tokio::time::sleep(Duration::from_millis(*ms)).await;
+                }
+                if let Some(sel) = selector {
+                    self.wait_for_selector(page, sel, timeout_ms).await?;
+                }
+            }
+            Action::Click { selector } => {
+                page.find_element(selector).await?.click().await?;
+            }
+            Action::Screenshot => {
+                // Handled at the end of scrape if needed, or we could take one here
+            }
+            Action::WriteText { selector, text } => {
+                page.find_element(selector).await?.type_str(text).await?;
+            }
+            Action::Press { key } => {
+                page.find_element("body").await?.press_key(key).await?;
+            }
+            Action::Scroll { direction, amount } => {
+                let dist = amount.unwrap_or(500) as i64;
+                let (x, y) = match direction.as_str() {
+                    "up" => (0, -dist),
+                    "down" => (0, dist),
+                    _ => (0, 0),
+                };
+                page.evaluate(format!("window.scrollBy({}, {})", x, y))
+                    .await?;
+            }
+            Action::Hover { selector } => {
+                page.find_element(selector).await?.hover().await?;
+            }
+        }
+        Ok(())
     }
 
     async fn scrape_page(&self, page: &Page, options: &ScrapeOptions) -> anyhow::Result<ScrapeResult> {
@@ -122,11 +174,26 @@ impl BrowserScraper {
             None => {}
         }
 
+        // Execute actions
+        let timeout_ms = options.timeout.unwrap_or(30000);
+        for action in &options.actions {
+            self.execute_action(page, action, timeout_ms).await?;
+        }
+
         let content = page.content().await?;
+        let mut screenshot = None;
+
+        if options.formats.contains(&DocumentFormat::Screenshot) {
+            screenshot = Some(
+                page.screenshot(chromiumoxide::page::ScreenshotParams::builder().build())
+                    .await?,
+            );
+        }
 
         Ok(ScrapeResult {
             url: options.url.clone(),
             raw_html: Some(content),
+            screenshot,
             status_code: None, // chromiumoxide doesn't easily give status code on page.goto?
             ..Default::default()
         })

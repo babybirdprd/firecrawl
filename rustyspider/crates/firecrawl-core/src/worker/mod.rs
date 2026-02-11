@@ -145,9 +145,28 @@ impl Worker {
 
         self.push_job(JobPayload::KickoffSitemap(KickoffSitemapJobData {
             sitemap_url,
-            team_id: data.team_id,
-            crawl_id: data.crawl_id,
+            team_id: data.team_id.clone(),
+            crawl_id: data.crawl_id.clone(),
         })).await?;
+
+        // 4. Robots.txt discovery - always from domain root
+        let robots_url = {
+            let mut u = Url::parse(&data.url)?;
+            u.set_path("/robots.txt");
+            u.to_string()
+        };
+
+        let crawl_manager = self.crawl_manager.clone();
+        let crawl_id = data.crawl_id.clone();
+        tokio::spawn(async move {
+            if let Ok(resp) = reqwest::get(&robots_url).await {
+                if resp.status().is_success() {
+                    if let Ok(robots_txt) = resp.text().await {
+                        let _ = crawl_manager.set_robots_txt(&crawl_id, &robots_txt).await;
+                    }
+                }
+            }
+        });
 
         Ok(())
     }
@@ -232,6 +251,8 @@ impl Worker {
         let discovered_links = extract_links(html).await?;
 
         // 2. Filter links
+        let robots_txt = self.crawl_manager.get_robots_txt(crawl_id).await?.unwrap_or_default();
+
         let filter_call = FilterLinksCall {
             links: discovered_links,
             base_url: config.base_url.clone(),
@@ -242,7 +263,7 @@ impl Worker {
             includes: vec![], // TODO: from config
             allow_backward_crawling: false,
             ignore_robots_txt: false,
-            robots_txt: "".to_string(), // TODO: fetch robots.txt
+            robots_txt,
             allow_external_content_links: false,
             allow_subdomains: false,
             regex_on_full_url: false,

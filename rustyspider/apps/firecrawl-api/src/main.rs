@@ -1,5 +1,8 @@
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Request, State},
+    http::StatusCode,
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
     Router,
 };
@@ -58,9 +61,14 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
-        .route("/v1/scrape", post(scrape))
-        .route("/v1/crawl", post(crawl))
-        .route("/v1/crawl/:id", get(get_crawl_status))
+        .nest(
+            "/v1",
+            Router::new()
+                .route("/scrape", post(scrape))
+                .route("/crawl", post(crawl))
+                .route("/crawl/:id", get(get_crawl_status))
+                .layer(middleware::from_fn(auth)),
+        )
         .with_state(app_state);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".into());
@@ -72,6 +80,29 @@ async fn main() {
 
 async fn health() -> &'static str {
     "OK"
+}
+
+async fn auth(req: Request, next: Next) -> Result<Response, StatusCode> {
+    let api_key = std::env::var("API_KEY").ok();
+
+    // If API_KEY is not set, allow all requests (for development)
+    if api_key.is_none() {
+        return Ok(next.run(req).await);
+    }
+
+    let api_key = api_key.unwrap();
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok());
+
+    if let Some(auth_header) = auth_header {
+        if auth_header == format!("Bearer {}", api_key) {
+            return Ok(next.run(req).await);
+        }
+    }
+
+    Err(StatusCode::UNAUTHORIZED)
 }
 
 struct AppState {

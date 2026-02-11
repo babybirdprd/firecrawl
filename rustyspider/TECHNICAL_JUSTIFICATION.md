@@ -25,3 +25,12 @@ The use of atomic Redis counters (`INCR`/`DECR`) for tracking active jobs in a c
 
 ### 7. Reliable Concurrent Processing
 By leveraging `tokio::sync::Semaphore` and spawning asynchronous tasks for job processing, the worker can handle multiple scraping tasks concurrently while respecting system resource limits. This architecture provides high throughput and scales naturally with the available hardware, matching the performance characteristics required for a production-grade scraper.
+
+### 8. Extensible Action System
+The browser action system uses a tagged enum (`Action`) to represent different types of interactions. This idiomatic Rust pattern allows for a clean, type-safe way to define and execute complex sequences of actions (click, type, wait, etc.) on the page, with exhaustive pattern matching ensuring all action types are handled.
+
+### 9. Efficient Robots.txt Management
+By fetching `robots.txt` once at the start of a crawl and caching it in Redis, we avoid redundant network requests for every discovered link. This approach leverages the shared Redis state to provide consistent crawling rules across all worker instances while minimizing overhead.
+
+### 10. Lightweight Middleware for Security
+The implementation of a custom Axum middleware for API key authentication provides a lightweight, zero-cost abstraction for securing the API. By using standard HTTP headers and environment variables, we ensure compatibility with common deployment patterns while maintaining the performance benefits of a single-binary Rust application.
