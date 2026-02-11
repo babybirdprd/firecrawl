@@ -7,7 +7,7 @@ use futures::StreamExt;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use std::time::Duration;
-use tracing::{info, warn, error, debug};
+use tracing::debug;
 
 /// A guard that ensures the page is closed when dropped.
 struct PageGuard {

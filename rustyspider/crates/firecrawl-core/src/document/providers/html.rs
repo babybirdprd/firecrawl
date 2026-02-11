@@ -68,7 +68,7 @@ impl HtmlProvider {
                         let code = node.text_contents();
                         // simplistic language detection: check for class on inner code element if exists
                         let mut language = None;
-                        if let Ok(mut code_node) = node.select_first("code") {
+                        if let Ok(code_node) = node.select_first("code") {
                             if let Some(classes) = code_node.attributes.borrow().get("class") {
                                 for class in classes.split_whitespace() {
                                     if let Some(lang) = class.strip_prefix("language-") {

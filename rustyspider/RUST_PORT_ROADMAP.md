@@ -49,13 +49,13 @@ The migration will be performed in phases, prioritizing core functionality.
 -   Integrate with Scraping Engine.
 
 ### Phase 4: Job Queue & Worker
--   Implement job queue system (Redis-backed).
--   Create worker loop to consume jobs and execute scraping tasks.
--   Implement concurrency controls (semaphores/rate limiters).
+- [x] Implement job queue system (Redis-backed).
+- [x] Create worker loop to consume jobs and execute scraping tasks.
+- [x] Implement concurrency controls (semaphores/rate limiters).
 
 ### Phase 5: API Implementation
--   Implement `/scrape` endpoint (synchronous/async).
--   Implement `/crawl` endpoints (asynchronous).
+- [x] Implement `/scrape` endpoint (synchronous/async).
+- [x] Implement `/crawl` endpoints (asynchronous).
 -   Integrate Auth and Rate Limiting middleware.
 -   Database integration for job persistence.
 

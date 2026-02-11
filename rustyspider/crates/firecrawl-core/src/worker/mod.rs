@@ -2,16 +2,19 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use crate::queue::{Queue, Job, JobPayload, JobStatus, ScrapeJobData, KickoffJobData, KickoffSitemapJobData};
 use crate::scraper::service::ScrapeService;
-use crate::scraper::{DocumentFormat, ScrapeResult};
+use crate::scraper::ScrapeResult;
 use crate::crawl::{CrawlManager, CrawlConfig};
 use crate::html::extract_links;
 use crate::crawler::{FilterLinksCall, filter_links};
 use url::Url;
 
+use tokio::sync::Semaphore;
+
 pub struct Worker {
     queue: Arc<dyn Queue>,
     scrape_service: Arc<ScrapeService>,
     crawl_manager: Arc<CrawlManager>,
+    semaphore: Arc<Semaphore>,
 }
 
 impl Worker {
@@ -19,49 +22,83 @@ impl Worker {
         queue: Arc<dyn Queue>,
         scrape_service: Arc<ScrapeService>,
         crawl_manager: Arc<CrawlManager>,
+        max_concurrency: usize,
     ) -> Self {
         Self {
             queue,
             scrape_service,
             crawl_manager,
+            semaphore: Arc::new(Semaphore::new(max_concurrency)),
         }
     }
 
-    pub async fn run(&self) -> anyhow::Result<()> {
+    pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
         tracing::info!("Worker started");
         loop {
+            let permit = self.semaphore.clone().acquire_owned().await?;
+            let worker = self.clone();
+
             match self.queue.pop().await {
                 Ok(Some(job)) => {
-                    let job_id = job.id;
-                    tracing::info!("Processing job: {:?} ({:?})", job_id, job.payload);
-
-                    match self.process_job(job).await {
-                        Ok(_) => {
-                            tracing::info!("Job completed: {:?}", job_id);
-                            if let Err(e) = self.queue.update_status(job_id, JobStatus::Completed).await {
-                                tracing::error!("Failed to update job status for {:?}: {}", job_id, e);
-                            }
-                            if let Err(e) = self.queue.ack(job_id).await {
-                                tracing::error!("Failed to ack job {:?}: {}", job_id, e);
-                            }
+                    tokio::spawn(async move {
+                        let _permit = permit;
+                        if let Err(e) = worker.handle_job_full_cycle(job).await {
+                            tracing::error!("Error in job task: {}", e);
                         }
-                        Err(e) => {
-                            tracing::error!("Error processing job {:?}: {}", job_id, e);
-                            if let Err(update_err) = self.queue.update_status(job_id, JobStatus::Failed(e.to_string())).await {
-                                tracing::error!("Failed to update job status for {:?} to failed: {}", job_id, update_err);
-                            }
-                        }
-                    }
+                    });
                 }
                 Ok(None) => {
-                    // Timeout on blocking pop, just continue
+                    // Permit dropped here
                 }
                 Err(e) => {
                     tracing::error!("Error popping job from queue: {}", e);
+                    // Permit dropped here
                     sleep(Duration::from_secs(1)).await;
                 }
             }
         }
+    }
+
+    async fn handle_job_full_cycle(&self, job: Job<JobPayload>) -> anyhow::Result<()> {
+        let job_id = job.id;
+        let crawl_id = job.payload.crawl_id().map(|s| s.to_string());
+        tracing::info!("Processing job: {:?} ({:?})", job_id, job.payload);
+
+        match self.process_job(job).await {
+            Ok(_) => {
+                tracing::info!("Job completed: {:?}", job_id);
+                if let Err(e) = self.queue.update_status(job_id, JobStatus::Completed).await {
+                    tracing::error!("Failed to update job status for {:?}: {}", job_id, e);
+                }
+                if let Err(e) = self.queue.ack(job_id).await {
+                    tracing::error!("Failed to ack job {:?}: {}", job_id, e);
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error processing job {:?}: {}", job_id, e);
+                if let Err(update_err) = self.queue.update_status(job_id, JobStatus::Failed(e.to_string())).await {
+                    tracing::error!("Failed to update job status for {:?} to failed: {}", job_id, update_err);
+                }
+                if let Err(e) = self.queue.ack(job_id).await {
+                    tracing::error!("Failed to ack job {:?} after failure: {}", job_id, e);
+                }
+            }
+        }
+
+        if let Some(cid) = crawl_id {
+            if let Err(e) = self.crawl_manager.decrement_active_jobs(&cid).await {
+                tracing::error!("Failed to decrement active jobs for {}: {}", cid, e);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn push_job(&self, payload: JobPayload) -> anyhow::Result<uuid::Uuid> {
+        if let Some(crawl_id) = payload.crawl_id() {
+            self.crawl_manager.increment_active_jobs(crawl_id).await?;
+        }
+        self.queue.push(payload).await
     }
 
     async fn process_job(&self, job: Job<JobPayload>) -> anyhow::Result<()> {
@@ -88,7 +125,7 @@ impl Worker {
 
         // 2. Lock and enqueue initial URL
         if self.crawl_manager.lock_url(&data.crawl_id, &data.url).await? {
-            self.queue.push(JobPayload::Scrape(ScrapeJobData {
+            self.push_job(JobPayload::Scrape(ScrapeJobData {
                 url: data.url.clone(),
                 options: data.scrape_options.clone(),
                 team_id: data.team_id.clone(),
@@ -106,7 +143,7 @@ impl Worker {
             u.to_string()
         };
 
-        self.queue.push(JobPayload::KickoffSitemap(KickoffSitemapJobData {
+        self.push_job(JobPayload::KickoffSitemap(KickoffSitemapJobData {
             sitemap_url,
             team_id: data.team_id,
             crawl_id: data.crawl_id,
@@ -140,7 +177,7 @@ impl Worker {
                             let current_count = self.crawl_manager.get_count(&data.crawl_id).await?;
                             if current_count < config.limit {
                                 self.crawl_manager.increment_count(&data.crawl_id).await?;
-                                self.queue.push(JobPayload::Scrape(ScrapeJobData {
+                                self.push_job(JobPayload::Scrape(ScrapeJobData {
                                     url: link,
                                     options: config.scrape_options.clone(),
                                     team_id: config.team_id.clone(),
@@ -153,7 +190,7 @@ impl Worker {
                 }
                 "recurse" => {
                     for sitemap_url in instruction.urls {
-                        self.queue.push(JobPayload::KickoffSitemap(KickoffSitemapJobData {
+                        self.push_job(JobPayload::KickoffSitemap(KickoffSitemapJobData {
                             sitemap_url,
                             team_id: data.team_id.clone(),
                             crawl_id: data.crawl_id.clone(),
@@ -177,16 +214,16 @@ impl Worker {
 
         // Handle discovered links if it's a crawl
         if let Some(crawl_id) = &data.crawl_id {
+            self.crawl_manager.add_result(crawl_id, &result).await?;
             self.handle_crawl_discovery(crawl_id, &data, &result).await?;
         }
 
-        // In a real app, we would save the result to a database here.
         tracing::info!("Scrape successful for {}", data.url);
 
         Ok(())
     }
 
-    async fn handle_crawl_discovery(&self, crawl_id: &str, data: &ScrapeJobData, result: &ScrapeResult) -> anyhow::Result<()> {
+    async fn handle_crawl_discovery(&self, crawl_id: &str, _data: &ScrapeJobData, result: &ScrapeResult) -> anyhow::Result<()> {
         let config = self.crawl_manager.get_config(crawl_id).await?
             .ok_or_else(|| anyhow::anyhow!("Crawl config not found for {}", crawl_id))?;
 
@@ -219,7 +256,7 @@ impl Worker {
                 let current_count = self.crawl_manager.get_count(crawl_id).await?;
                 if current_count < config.limit {
                     self.crawl_manager.increment_count(crawl_id).await?;
-                    self.queue.push(JobPayload::Scrape(ScrapeJobData {
+                    self.push_job(JobPayload::Scrape(ScrapeJobData {
                         url: link,
                         options: config.scrape_options.clone(),
                         team_id: config.team_id.clone(),

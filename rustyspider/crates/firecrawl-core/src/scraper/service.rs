@@ -103,7 +103,7 @@ mod tests {
         // For now, just a basic instantiation test.
         let service = ScrapeService::new().await.unwrap();
 
-        let options = ScrapeOptions {
+        let _options = ScrapeOptions {
             url: "https://example.com".to_string(),
             formats: vec![DocumentFormat::Markdown],
             only_main_content: false,

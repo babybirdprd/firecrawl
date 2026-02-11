@@ -19,3 +19,9 @@ The pipeline from raw scrape to Markdown is now a clear, linear sequence of tran
 
 ### 5. Future Extensibility
 The service-oriented architecture makes it trivial to add new scrapers (e.g., a stealth scraper) or new processors (e.g., an LLM extraction step) by simply adding them to the `ScrapeService` pipeline.
+
+### 6. Robust Crawl State Management
+The use of atomic Redis counters (`INCR`/`DECR`) for tracking active jobs in a crawl ensures that the crawl status (scraping vs. completed) is accurate even when multiple worker instances are processing jobs in parallel. This idiomatic approach to distributed state management avoids the complexities of manual locks while maintaining consistency.
+
+### 7. Reliable Concurrent Processing
+By leveraging `tokio::sync::Semaphore` and spawning asynchronous tasks for job processing, the worker can handle multiple scraping tasks concurrently while respecting system resource limits. This architecture provides high throughput and scales naturally with the available hardware, matching the performance characteristics required for a production-grade scraper.
