@@ -47,9 +47,9 @@ impl Scraper for HttpScraper {
 
         Ok(ScrapeResult {
             url: options.url,
-            content,
+            raw_html: Some(content),
             status_code: Some(status.as_u16()),
-            metadata: None,
+            ..Default::default()
         })
     }
 }
