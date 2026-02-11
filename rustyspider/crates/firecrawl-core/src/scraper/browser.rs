@@ -7,6 +7,37 @@ use futures::StreamExt;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use std::time::Duration;
+use tracing::{info, warn, error, debug};
+
+/// A guard that ensures the page is closed when dropped.
+struct PageGuard {
+    page: Page,
+}
+
+impl PageGuard {
+    fn new(page: Page) -> Self {
+        Self { page }
+    }
+}
+
+impl Drop for PageGuard {
+    fn drop(&mut self) {
+        let page = self.page.clone();
+        tokio::spawn(async move {
+            if let Err(e) = page.close().await {
+                debug!("Failed to close page in Drop: {}", e);
+            }
+        });
+    }
+}
+
+impl std::ops::Deref for PageGuard {
+    type Target = Page;
+
+    fn deref(&self) -> &Self::Target {
+        &self.page
+    }
+}
 
 #[derive(Clone)]
 pub struct BrowserScraper {
@@ -26,6 +57,7 @@ impl BrowserScraper {
         let handle = tokio::spawn(async move {
             while let Some(h) = handler.next().await {
                 if h.is_err() {
+                    debug!("Browser handler error: {:?}", h);
                     break;
                 }
             }
@@ -35,6 +67,22 @@ impl BrowserScraper {
             browser: Arc::new(browser),
             _handle: Arc::new(handle),
         })
+    }
+
+    async fn wait_for_selector(&self, page: &Page, selector: &str, timeout_ms: u64) -> anyhow::Result<()> {
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_millis(timeout_ms);
+        let mut delay = Duration::from_millis(50);
+
+        while start.elapsed() < timeout {
+            if page.find_element(selector).await.is_ok() {
+                return Ok(());
+            }
+            tokio::time::sleep(delay).await;
+            delay = (delay * 2).min(Duration::from_millis(500));
+        }
+
+        Err(anyhow::anyhow!("Timeout waiting for selector: {}", selector))
     }
 
     async fn scrape_page(&self, page: &Page, options: &ScrapeOptions) -> anyhow::Result<ScrapeResult> {
@@ -65,25 +113,8 @@ impl BrowserScraper {
 
         match &options.wait_for {
             Some(WaitFor::Selector(selector)) => {
-                // improved wait for selector with polling
-                let start = std::time::Instant::now();
-                let timeout = Duration::from_millis(options.timeout.unwrap_or(30000));
-                let mut found = false;
-
-                while start.elapsed() < timeout {
-                    match page.find_element(selector).await {
-                        Ok(_) => {
-                            found = true;
-                            break;
-                        }
-                        Err(_) => {
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
-                    }
-                }
-                if !found {
-                     return Err(anyhow::anyhow!("Timeout waiting for selector: {}", selector));
-                }
+                let timeout = options.timeout.unwrap_or(30000);
+                self.wait_for_selector(page, selector, timeout).await?;
             }
             Some(WaitFor::Time(ms)) => {
                 tokio::time::sleep(Duration::from_millis(*ms)).await;
@@ -106,24 +137,17 @@ impl BrowserScraper {
 impl Scraper for BrowserScraper {
     async fn scrape(&self, options: ScrapeOptions) -> anyhow::Result<ScrapeResult> {
         let page = self.browser.new_page("about:blank").await?;
+        let page_guard = PageGuard::new(page);
 
         let timeout_duration = Duration::from_millis(options.timeout.unwrap_or(30000));
 
         // wrap in timeout
-        let result = tokio::time::timeout(timeout_duration, self.scrape_page(&page, &options)).await;
+        let result = tokio::time::timeout(timeout_duration, self.scrape_page(&page_guard, &options)).await;
 
-        let scrape_res = match result {
+        match result {
             Ok(res) => res, // inner result
             Err(_) => Err(anyhow::anyhow!("Scrape timed out")),
-        };
-
-        // ensure page is closed
-        if let Err(e) = page.close().await {
-            // log error but don't overwrite scrape error if it exists?
-            // for now, just print to stderr or ignore if we want to be silent
-            eprintln!("Failed to close page: {}", e);
         }
-
-        scrape_res
+        // PageGuard will automatically close the page when dropped
     }
 }
