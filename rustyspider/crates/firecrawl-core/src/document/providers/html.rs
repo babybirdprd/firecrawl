@@ -63,7 +63,32 @@ impl HtmlProvider {
                         let src = attrs.get("src").unwrap_or("").to_string();
                         let alt = attrs.get("alt").map(|s| s.to_string());
                         Some(Block::Image(Image { src, alt }))
-                    }
+                    },
+                    "pre" => {
+                        let code = node.text_contents();
+                        // simplistic language detection: check for class on inner code element if exists
+                        let mut language = None;
+                        if let Ok(mut code_node) = node.select_first("code") {
+                            if let Some(classes) = code_node.attributes.borrow().get("class") {
+                                for class in classes.split_whitespace() {
+                                    if let Some(lang) = class.strip_prefix("language-") {
+                                        language = Some(lang.to_string());
+                                        break;
+                                    }
+                                    if let Some(lang) = class.strip_prefix("lang-") {
+                                        language = Some(lang.to_string());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        Some(Block::CodeBlock(CodeBlock {
+                            code,
+                            language,
+                        }))
+                    },
+                    "hr" => Some(Block::Divider),
                     // Containers that should be recursed into are handled in parse_blocks_recursive
                     _ => None,
                 }
@@ -84,7 +109,7 @@ impl HtmlProvider {
         match node.data() {
             NodeData::Text(text) => {
                 let content = text.borrow();
-                if !content.trim().is_empty() {
+                if !content.is_empty() {
                     inlines.push(Inline::Text(content.to_string()));
                 }
             }

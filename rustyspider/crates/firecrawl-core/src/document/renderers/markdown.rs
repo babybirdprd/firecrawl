@@ -49,6 +49,21 @@ impl MarkdownRenderer {
                 self.render_image(i, out);
                 out.push('\n');
             }
+            Block::CodeBlock(c) => {
+                out.push_str("```");
+                if let Some(lang) = &c.language {
+                    out.push_str(lang);
+                }
+                out.push('\n');
+                out.push_str(&c.code);
+                if !c.code.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push_str("```\n");
+            }
+            Block::Divider => {
+                out.push_str("---\n");
+            }
         }
     }
 
@@ -115,32 +130,57 @@ impl MarkdownRenderer {
     }
 
     fn render_table(&self, t: &Table, out: &mut String) {
-        // Simple GFM table renderer
-        // Find header row
+        // Calculate max columns
+        let mut max_cols = 0;
+        for row in &t.rows {
+             max_cols = max_cols.max(row.cells.len());
+        }
+        if max_cols == 0 {
+            return;
+        }
+
         let header_row = t.rows.iter().find(|r| matches!(r.kind, TableRowKind::Header));
         let body_rows: Vec<&TableRow> = t.rows.iter().filter(|r| matches!(r.kind, TableRowKind::Body)).collect();
         let footer_rows: Vec<&TableRow> = t.rows.iter().filter(|r| matches!(r.kind, TableRowKind::Footer)).collect();
 
+        let mut used_first_row_as_header = false;
+
+        // Render header
         if let Some(header) = header_row {
-            self.render_table_row(header, out);
-            // Separator line
-            out.push('|');
-            for _ in &header.cells {
-                out.push_str(" --- |");
-            }
-            out.push('\n');
+            self.render_table_row(header, max_cols, out);
+        } else if let Some(first) = body_rows.first() {
+            // Treat first row as header if no explicit header
+             self.render_table_row(first, max_cols, out);
+             used_first_row_as_header = true;
+        } else {
+             // Empty header row if no body rows either (edge case) or just to be safe
+             out.push('|');
+             for _ in 0..max_cols {
+                 out.push_str(" |");
+             }
+             out.push('\n');
         }
 
-        for row in body_rows {
-            self.render_table_row(row, out);
+        // Separator
+        out.push('|');
+        for _ in 0..max_cols {
+            out.push_str(" --- |");
+        }
+        out.push('\n');
+
+        for (i, row) in body_rows.iter().enumerate() {
+            if used_first_row_as_header && i == 0 {
+                continue;
+            }
+            self.render_table_row(row, max_cols, out);
         }
 
         for row in footer_rows {
-            self.render_table_row(row, out);
+             self.render_table_row(row, max_cols, out);
         }
     }
 
-    fn render_table_row(&self, row: &TableRow, out: &mut String) {
+    fn render_table_row(&self, row: &TableRow, max_cols: usize, out: &mut String) {
         out.push('|');
         for cell in &row.cells {
             out.push(' ');
@@ -155,7 +195,13 @@ impl MarkdownRenderer {
                 }
                 cell_content.push(' ');
             }
-            out.push_str(cell_content.trim());
+            // Replace newlines with space to preserve table structure
+            let content = cell_content.trim().replace('\n', " ");
+            out.push_str(&content);
+            out.push_str(" |");
+        }
+        // Pad missing cells
+        for _ in row.cells.len()..max_cols {
             out.push_str(" |");
         }
         out.push('\n');

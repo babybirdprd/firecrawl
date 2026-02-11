@@ -31,6 +31,14 @@ pub enum Block {
   Table(Table),
   List(List),
   Image(Image),
+  CodeBlock(CodeBlock),
+  Divider,
+}
+
+#[derive(Debug, Clone)]
+pub struct CodeBlock {
+    pub code: String,
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone)]

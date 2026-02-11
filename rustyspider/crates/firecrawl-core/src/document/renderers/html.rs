@@ -93,6 +93,14 @@ impl HtmlRenderer {
                 Block::Table(t)      => { (self.render_table(t)) }
                 Block::List(l)       => { (self.render_list(l)) }
                 Block::Image(i)      => { (self.render_image(i)) }
+                Block::CodeBlock(c)  => {
+                    pre {
+                        code class=[c.language.as_ref().map(|l| format!("language-{}", l))] {
+                            (c.code)
+                        }
+                    }
+                }
+                Block::Divider       => { hr; }
             }
         }
     }
