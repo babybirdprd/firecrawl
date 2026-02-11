@@ -31,6 +31,16 @@ pub enum JobPayload {
     KickoffSitemap(KickoffSitemapJobData),
 }
 
+impl JobPayload {
+    pub fn crawl_id(&self) -> Option<&str> {
+        match self {
+            JobPayload::Scrape(data) => data.crawl_id.as_deref(),
+            JobPayload::Kickoff(data) => Some(&data.crawl_id),
+            JobPayload::KickoffSitemap(data) => Some(&data.crawl_id),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScrapeJobData {
     pub url: String,

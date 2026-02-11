@@ -49,7 +49,7 @@ async fn main() {
     });
 
     // Start background worker
-    let worker = Worker::new(queue, scrape_service, crawl_manager);
+    let worker = Arc::new(Worker::new(queue, scrape_service, crawl_manager, 10));
     tokio::spawn(async move {
         if let Err(e) = worker.run().await {
             tracing::error!("Worker error: {}", e);
@@ -60,6 +60,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/v1/scrape", post(scrape))
         .route("/v1/crawl", post(crawl))
+        .route("/v1/crawl/:id", get(get_crawl_status))
         .with_state(app_state);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".into());
@@ -134,17 +135,81 @@ async fn crawl(
         scrape_options: req.scrape_options,
     });
 
+    // Increment active jobs for the kickoff job
+    if let Err(e) = state.crawl_manager.increment_active_jobs(&crawl_id).await {
+         return Json(CrawlResponse {
+            success: false,
+            id: None,
+            url: None,
+            error: Some(format!("Failed to initialize crawl: {}", e)),
+        });
+    }
+
     match state.queue.push(payload).await {
         Ok(_) => Json(CrawlResponse {
             success: true,
             id: Some(crawl_id.clone()),
-            url: Some(format!("/v1/crawl/{}", crawl_id)), // Placeholder
+            url: Some(format!("/v1/crawl/{}", crawl_id)),
             error: None,
         }),
         Err(e) => Json(CrawlResponse {
             success: false,
             id: None,
             url: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CrawlStatusResponse {
+    success: bool,
+    status: String,
+    completed: u32,
+    total: u32,
+    credits_used: u32,
+    expires_at: String,
+    data: Vec<ScrapeResult>,
+    error: Option<String>,
+}
+
+async fn get_crawl_status(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Json<CrawlStatusResponse> {
+    match state.crawl_manager.get_status(&id).await {
+        Ok(Some(status)) => {
+            let results = state.crawl_manager.get_results(&id).await.unwrap_or_default();
+            Json(CrawlStatusResponse {
+                success: true,
+                status: status.status,
+                completed: status.completed,
+                total: status.total,
+                credits_used: status.completed, // Placeholder
+                expires_at: "".to_string(), // Placeholder
+                data: results,
+                error: None,
+            })
+        }
+        Ok(None) => Json(CrawlStatusResponse {
+            success: false,
+            status: "not_found".to_string(),
+            completed: 0,
+            total: 0,
+            credits_used: 0,
+            expires_at: "".to_string(),
+            data: vec![],
+            error: Some("Crawl not found".to_string()),
+        }),
+        Err(e) => Json(CrawlStatusResponse {
+            success: false,
+            status: "error".to_string(),
+            completed: 0,
+            total: 0,
+            credits_used: 0,
+            expires_at: "".to_string(),
+            data: vec![],
             error: Some(e.to_string()),
         }),
     }
