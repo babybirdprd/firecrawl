@@ -919,10 +919,12 @@ name = "firecrawl-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "calamine",
  "cfb",
  "chromiumoxide",
  "chrono",
+ "futures",
  "kuchikiki",
  "lol_html",
  "lopdf",
