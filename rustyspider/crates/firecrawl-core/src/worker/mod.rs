@@ -6,6 +6,7 @@ use crate::scraper::ScrapeResult;
 use crate::crawl::{CrawlManager, CrawlConfig};
 use crate::html::extract_links;
 use crate::crawler::{FilterLinksCall, filter_links};
+use crate::webhook::WebhookSender;
 use url::Url;
 
 use tokio::sync::Semaphore;
@@ -14,6 +15,7 @@ pub struct Worker {
     queue: Arc<dyn Queue>,
     scrape_service: Arc<ScrapeService>,
     crawl_manager: Arc<CrawlManager>,
+    webhook_sender: Arc<WebhookSender>,
     semaphore: Arc<Semaphore>,
 }
 
@@ -28,6 +30,7 @@ impl Worker {
             queue,
             scrape_service,
             crawl_manager,
+            webhook_sender: Arc::new(WebhookSender::new()),
             semaphore: Arc::new(Semaphore::new(max_concurrency)),
         }
     }
@@ -86,8 +89,20 @@ impl Worker {
         }
 
         if let Some(cid) = crawl_id {
-            if let Err(e) = self.crawl_manager.decrement_active_jobs(&cid).await {
-                tracing::error!("Failed to decrement active jobs for {}: {}", cid, e);
+            match self.crawl_manager.decrement_active_jobs(&cid).await {
+                Ok(0) => {
+                    // Crawl completed
+                    if let Ok(Some(config)) = self.crawl_manager.get_config(&cid).await {
+                        if let Some(webhook) = &config.webhook {
+                            let results = self.crawl_manager.get_results(&cid).await.unwrap_or_default();
+                            let _ = self.webhook_sender.send(webhook, "crawl.completed", &cid, results).await;
+                        }
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::error!("Failed to decrement active jobs for {}: {}", cid, e);
+                }
             }
         }
 
@@ -131,8 +146,14 @@ impl Worker {
             limit: data.limit.unwrap_or(1000),
             includes: data.includes,
             excludes: data.excludes,
+            webhook: data.scrape_options.webhook.clone(),
         };
         self.crawl_manager.save_config(&config).await?;
+
+        // 1.5 Send webhook (crawl.started)
+        if let Some(webhook) = &config.webhook {
+            let _ = self.webhook_sender.send(webhook, "crawl.started", &data.crawl_id, vec![]).await;
+        }
 
         // 2. Lock and enqueue initial URL
         if self.crawl_manager.lock_url(&data.crawl_id, &data.url).await? {
@@ -265,6 +286,14 @@ impl Worker {
         // Handle discovered links if it's a crawl
         if let Some(crawl_id) = &data.crawl_id {
             self.crawl_manager.add_result(crawl_id, &result).await?;
+
+            // Send webhook (crawl.page)
+            if let Ok(Some(config)) = self.crawl_manager.get_config(crawl_id).await {
+                if let Some(webhook) = &config.webhook {
+                    let _ = self.webhook_sender.send(webhook, "crawl.page", crawl_id, vec![result.clone()]).await;
+                }
+            }
+
             self.handle_crawl_discovery(crawl_id, &data, &result).await?;
         }
 
