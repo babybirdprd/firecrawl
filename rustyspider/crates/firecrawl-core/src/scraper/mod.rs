@@ -83,6 +83,7 @@ pub struct ScrapeOptions {
     #[serde(default)]
     pub actions: Vec<Action>,
     pub extract: Option<ExtractOptions>,
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -126,6 +127,7 @@ mod tests {
             block_resources: false,
             actions: vec![],
             extract: None,
+            proxy_url: None,
         };
         // Verify it implements Scraper trait
         let _scraper_trait: &dyn Scraper = &scraper;

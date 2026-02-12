@@ -39,7 +39,7 @@ The migration will be performed in phases, prioritizing core functionality.
 - [x] Implement `BrowserScraper` using `chromiumoxide`.
     - [x] Browser lifecycle management.
     - [x] Page navigation, content retrieval.
-    -   Proxy support.
+    - [x] Proxy support (via global configuration).
     - [x] Ad/Tracker blocking (network interception).
 - [x] Implement `HttpScraper` using `reqwest`.
 
@@ -55,7 +55,7 @@ The migration will be performed in phases, prioritizing core functionality.
 
 ### Phase 5: API Implementation
 - [x] Implement `/scrape` endpoint (synchronous/async).
-- [x] Implement `/crawl` endpoints (asynchronous).
+- [x] Implement `/crawl` endpoints (asynchronous with enhanced configuration).
 -   Integrate Auth and Rate Limiting middleware.
 -   Database integration for job persistence.
 

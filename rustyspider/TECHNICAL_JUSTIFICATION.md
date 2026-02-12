@@ -43,3 +43,9 @@ By introducing the `StructuredDataExtractor` trait, we decouple the LLM extracti
 
 ### 13. Enhanced Sitemap Discovery
 Sitemap discovery has been improved by automatically extracting sitemap URLs from `robots.txt` in addition to the standard `/sitemap.xml` guess. This leverages the `texting_robots` crate to provide more comprehensive crawling coverage with minimal overhead.
+
+### 14. Flexible Crawl Configuration
+The crawl configuration has been expanded to support `limit`, `max_depth`, `includes`, and `excludes` directly from the API request. This allows for more fine-grained control over the crawling process, which is essential for complex websites. By persisting these settings in `CrawlConfig` and passing them through the `Worker` to the link filtering logic, we ensure consistent behavior across all jobs in a crawl.
+
+### 15. Hybrid Proxy Support
+Proxy support is implemented using a hybrid approach: `HttpScraper` supports per-request proxies by creating lightweight `reqwest::Client` instances as needed, while `BrowserScraper` supports a global proxy configured at launch. This balances the need for flexible proxy rotation in simple scrapes with the resource constraints of maintaining a headless browser instance.

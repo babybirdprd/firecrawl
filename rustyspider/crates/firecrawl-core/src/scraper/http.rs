@@ -25,7 +25,15 @@ impl Default for HttpScraper {
 #[async_trait]
 impl Scraper for HttpScraper {
     async fn scrape(&self, options: ScrapeOptions) -> anyhow::Result<ScrapeResult> {
-        let mut request = self.client.get(&options.url);
+        let client = if let Some(proxy_url) = &options.proxy_url {
+            reqwest::Client::builder()
+                .proxy(reqwest::Proxy::all(proxy_url)?)
+                .build()?
+        } else {
+            self.client.clone()
+        };
+
+        let mut request = client.get(&options.url);
 
         if let Some(timeout) = options.timeout {
             request = request.timeout(Duration::from_millis(timeout));
