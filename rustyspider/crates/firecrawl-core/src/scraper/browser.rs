@@ -46,9 +46,14 @@ pub struct BrowserScraper {
 }
 
 impl BrowserScraper {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(proxy_url: Option<String>) -> anyhow::Result<Self> {
+        let mut builder = BrowserConfig::builder();
+        if let Some(proxy) = proxy_url {
+            builder = builder.arg(format!("--proxy-server={}", proxy));
+        }
+
         let (browser, mut handler) = Browser::launch(
-            BrowserConfig::builder()
+            builder
                 .build()
                 .map_err(|e| anyhow::anyhow!(e))?,
         )

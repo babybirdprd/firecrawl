@@ -11,6 +11,8 @@ pub struct CrawlConfig {
     pub scrape_options: ScrapeOptions,
     pub max_depth: u32,
     pub limit: u32,
+    pub includes: Vec<String>,
+    pub excludes: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

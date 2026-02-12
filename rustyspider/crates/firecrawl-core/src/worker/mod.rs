@@ -127,8 +127,10 @@ impl Worker {
             team_id: data.team_id.clone(),
             base_url: data.url.clone(),
             scrape_options: data.scrape_options.clone(),
-            max_depth: 10, // Default for now
-            limit: 1000, // Default for now
+            max_depth: data.max_depth.unwrap_or(10),
+            limit: data.limit.unwrap_or(1000),
+            includes: data.includes,
+            excludes: data.excludes,
         };
         self.crawl_manager.save_config(&config).await?;
 
@@ -288,8 +290,8 @@ impl Worker {
             initial_url: config.base_url.clone(),
             max_depth: config.max_depth,
             limit: Some(config.limit as i64),
-            excludes: vec![], // TODO: from config
-            includes: vec![], // TODO: from config
+            excludes: config.excludes.clone(),
+            includes: config.includes.clone(),
             allow_backward_crawling: false,
             ignore_robots_txt: false,
             robots_txt,

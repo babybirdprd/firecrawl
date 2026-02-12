@@ -56,6 +56,10 @@ pub struct KickoffJobData {
     pub team_id: String,
     pub crawl_id: String,
     pub scrape_options: ScrapeOptions,
+    pub limit: Option<u32>,
+    pub max_depth: Option<u32>,
+    pub includes: Vec<String>,
+    pub excludes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

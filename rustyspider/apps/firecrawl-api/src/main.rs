@@ -27,9 +27,10 @@ async fn main() {
         .init();
 
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".into());
+    let proxy_url = std::env::var("PROXY_SERVER").ok();
 
     let scrape_service = Arc::new(
-        ScrapeService::new()
+        ScrapeService::new(proxy_url)
             .await
             .expect("Failed to initialize ScrapeService"),
     );
@@ -138,10 +139,17 @@ async fn scrape(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CrawlRequest {
     url: String,
     #[serde(default)]
     scrape_options: ScrapeOptions,
+    limit: Option<u32>,
+    max_depth: Option<u32>,
+    #[serde(default)]
+    includes: Vec<String>,
+    #[serde(default)]
+    excludes: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -164,6 +172,10 @@ async fn crawl(
         team_id,
         crawl_id: crawl_id.clone(),
         scrape_options: req.scrape_options,
+        limit: req.limit,
+        max_depth: req.max_depth,
+        includes: req.includes,
+        excludes: req.excludes,
     });
 
     // Increment active jobs for the kickoff job

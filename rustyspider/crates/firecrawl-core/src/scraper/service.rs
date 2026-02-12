@@ -31,10 +31,10 @@ impl StructuredDataExtractor for NoopExtractor {
 }
 
 impl ScrapeService {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(proxy_url: Option<String>) -> anyhow::Result<Self> {
         let http_scraper = HttpScraper::new();
         // Try to launch browser, but don't fail if it's not available
-        let browser_scraper = match BrowserScraper::new().await {
+        let browser_scraper = match BrowserScraper::new(proxy_url).await {
             Ok(b) => Some(b),
             Err(e) => {
                 tracing::warn!("Failed to initialize BrowserScraper: {}", e);
@@ -128,7 +128,7 @@ mod tests {
         // This test requires internet access if we use a real URL,
         // or we could mock the scrapers if we wanted to be more unit-testy.
         // For now, just a basic instantiation test.
-        let service = ScrapeService::new().await.unwrap();
+        let service = ScrapeService::new(None).await.unwrap();
 
         let _options = ScrapeOptions {
             url: "https://example.com".to_string(),
@@ -143,6 +143,7 @@ mod tests {
             block_resources: false,
             actions: vec![],
             extract: None,
+            proxy_url: None,
         };
 
         // We won't actually call scrape() here because it might fail due to no internet/browser
