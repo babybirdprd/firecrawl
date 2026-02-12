@@ -8,6 +8,26 @@ pub struct ScrapeService {
     http_scraper: HttpScraper,
     browser_scraper: Option<BrowserScraper>,
     converter: DocumentConverter,
+    extractor: Box<dyn StructuredDataExtractor>,
+}
+
+#[async_trait::async_trait]
+pub trait StructuredDataExtractor: Send + Sync {
+    async fn extract(&self, html: &str, options: ExtractOptions) -> anyhow::Result<serde_json::Value>;
+}
+
+pub struct NoopExtractor;
+
+#[async_trait::async_trait]
+impl StructuredDataExtractor for NoopExtractor {
+    async fn extract(&self, _html: &str, options: ExtractOptions) -> anyhow::Result<serde_json::Value> {
+        tracing::info!("Extracting structured data with schema (Noop): {:?}", options.schema);
+        Ok(serde_json::json!({
+            "success": true,
+            "data": {},
+            "warning": "LLM extraction is currently a placeholder (NoopExtractor)"
+        }))
+    }
 }
 
 impl ScrapeService {
@@ -22,11 +42,13 @@ impl ScrapeService {
             }
         };
         let converter = DocumentConverter::new();
+        let extractor = Box::new(NoopExtractor);
 
         Ok(Self {
             http_scraper,
             browser_scraper,
             converter,
+            extractor,
         })
     }
 
@@ -87,23 +109,12 @@ impl ScrapeService {
             result.raw_html = Some(raw_html);
         }
 
-        // 5. LLM Extraction (Placeholder)
+        // 5. LLM Extraction
         if let Some(extract_opts) = options.extract {
-            result.extract = Some(self.extract_structured_data(&cleaned_html, extract_opts).await?);
+            result.extract = Some(self.extractor.extract(&cleaned_html, extract_opts).await?);
         }
 
         Ok(result)
-    }
-
-    async fn extract_structured_data(&self, _html: &str, options: ExtractOptions) -> anyhow::Result<serde_json::Value> {
-        tracing::info!("Extracting structured data with schema: {:?}", options.schema);
-        // In a real implementation, this would call OpenAI or another LLM.
-        // For now, we return a mock value to demonstrate the pipeline.
-        Ok(serde_json::json!({
-            "success": true,
-            "data": {},
-            "warning": "LLM extraction is currently a placeholder"
-        }))
     }
 }
 

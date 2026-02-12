@@ -60,9 +60,9 @@ The migration will be performed in phases, prioritizing core functionality.
 -   Database integration for job persistence.
 
 ### Phase 6: Polish & Features
--   LLM Extraction logic.
+- [/] LLM Extraction logic (Trait-based extensible architecture implemented).
 -   Webhook notifications.
--   Sitemap discovery.
+- [/] Sitemap discovery (Enhanced discovery via `robots.txt` implemented).
 -   Deep research features.
 
 ## 📦 Dependencies

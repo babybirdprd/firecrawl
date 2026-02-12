@@ -95,10 +95,19 @@ impl Worker {
     }
 
     async fn push_job(&self, payload: JobPayload) -> anyhow::Result<uuid::Uuid> {
-        if let Some(crawl_id) = payload.crawl_id() {
-            self.crawl_manager.increment_active_jobs(crawl_id).await?;
+        let crawl_id = payload.crawl_id().map(|s| s.to_string());
+        if let Some(crawl_id) = crawl_id {
+            self.crawl_manager.increment_active_jobs(&crawl_id).await?;
+            match self.queue.push(payload).await {
+                Ok(id) => Ok(id),
+                Err(e) => {
+                    let _ = self.crawl_manager.decrement_active_jobs(&crawl_id).await;
+                    Err(e)
+                }
+            }
+        } else {
+            self.queue.push(payload).await
         }
-        self.queue.push(payload).await
     }
 
     async fn process_job(&self, job: Job<JobPayload>) -> anyhow::Result<()> {
@@ -157,12 +166,32 @@ impl Worker {
         };
 
         let crawl_manager = self.crawl_manager.clone();
+        let queue = self.queue.clone();
         let crawl_id = data.crawl_id.clone();
+        let team_id = data.team_id.clone();
+
         tokio::spawn(async move {
             if let Ok(resp) = reqwest::get(&robots_url).await {
                 if resp.status().is_success() {
                     if let Ok(robots_txt) = resp.text().await {
                         let _ = crawl_manager.set_robots_txt(&crawl_id, &robots_txt).await;
+
+                        // Extract sitemaps from robots.txt
+                        let sitemaps = crate::crawler::extract_sitemaps_from_robots(&robots_txt);
+                        for sitemap_url in sitemaps {
+                            if let Err(e) = crawl_manager.increment_active_jobs(&crawl_id).await {
+                                tracing::error!("Failed to increment active jobs for sitemap {}: {}", sitemap_url, e);
+                                continue;
+                            }
+                            if let Err(e) = queue.push(JobPayload::KickoffSitemap(KickoffSitemapJobData {
+                                sitemap_url: sitemap_url.clone(),
+                                team_id: team_id.clone(),
+                                crawl_id: crawl_id.clone(),
+                            })).await {
+                                tracing::error!("Failed to push sitemap job for {}: {}", sitemap_url, e);
+                                let _ = crawl_manager.decrement_active_jobs(&crawl_id).await;
+                            }
+                        }
                     }
                 }
             }

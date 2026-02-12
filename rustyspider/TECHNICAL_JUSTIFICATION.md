@@ -34,3 +34,12 @@ By fetching `robots.txt` once at the start of a crawl and caching it in Redis, w
 
 ### 10. Lightweight Middleware for Security
 The implementation of a custom Axum middleware for API key authentication provides a lightweight, zero-cost abstraction for securing the API. By using standard HTTP headers and environment variables, we ensure compatibility with common deployment patterns while maintaining the performance benefits of a single-binary Rust application.
+
+### 11. Full Header Support in Browser
+`BrowserScraper` now explicitly supports custom HTTP headers by leveraging CDP's `Network.setExtraHTTPHeaders` command. This ensures that browser-based scraping is consistent with HTTP-based scraping and allows for advanced use cases like bypassing simple bot detection or passing session cookies.
+
+### 12. Extensible Structured Data Extraction
+By introducing the `StructuredDataExtractor` trait, we decouple the LLM extraction logic from the core `ScrapeService`. This allows for different extraction backends (OpenAI, Anthropic, local models) to be swapped in or out easily, adhering to the Open-Closed Principle.
+
+### 13. Enhanced Sitemap Discovery
+Sitemap discovery has been improved by automatically extracting sitemap URLs from `robots.txt` in addition to the standard `/sitemap.xml` guess. This leverages the `texting_robots` crate to provide more comprehensive crawling coverage with minimal overhead.
