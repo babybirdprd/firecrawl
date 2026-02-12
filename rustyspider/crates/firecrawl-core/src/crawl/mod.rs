@@ -13,6 +13,7 @@ pub struct CrawlConfig {
     pub limit: u32,
     pub includes: Vec<String>,
     pub excludes: Vec<String>,
+    pub webhook: Option<crate::scraper::WebhookOptions>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,14 +27,22 @@ pub struct CrawlStatus {
 
 pub struct CrawlManager {
     pool: Pool,
+    storage: Option<std::sync::Arc<crate::storage::Storage>>,
 }
 
 impl CrawlManager {
-    pub fn new(pool: Pool) -> Self {
-        Self { pool }
+    pub fn new(pool: Pool, storage: Option<std::sync::Arc<crate::storage::Storage>>) -> Self {
+        Self { pool, storage }
+    }
+
+    pub fn pool(&self) -> &Pool {
+        &self.pool
     }
 
     pub async fn save_config(&self, config: &CrawlConfig) -> anyhow::Result<()> {
+        if let Some(storage) = &self.storage {
+            let _ = storage.save_crawl(config).await;
+        }
         let mut conn = self.pool.get().await?;
         let key = format!("firecrawl:crawl:{}:config", config.id);
         let json = serde_json::to_string(config)?;
@@ -111,6 +120,9 @@ impl CrawlManager {
     }
 
     pub async fn add_result(&self, crawl_id: &str, result: &ScrapeResult) -> anyhow::Result<()> {
+        if let Some(storage) = &self.storage {
+            let _ = storage.save_scrape_result(crawl_id, result).await;
+        }
         let mut conn = self.pool.get().await?;
         let key = format!("firecrawl:crawl:{}:results", crawl_id);
         let json = serde_json::to_string(result)?;

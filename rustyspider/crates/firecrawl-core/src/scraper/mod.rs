@@ -84,6 +84,15 @@ pub struct ScrapeOptions {
     pub actions: Vec<Action>,
     pub extract: Option<ExtractOptions>,
     pub proxy_url: Option<String>,
+    pub webhook: Option<WebhookOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookOptions {
+    pub url: String,
+    pub headers: Option<HashMap<String, String>>,
+    pub metadata: Option<serde_json::Value>,
+    pub events: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -128,6 +137,7 @@ mod tests {
             actions: vec![],
             extract: None,
             proxy_url: None,
+            webhook: None,
         };
         // Verify it implements Scraper trait
         let _scraper_trait: &dyn Scraper = &scraper;

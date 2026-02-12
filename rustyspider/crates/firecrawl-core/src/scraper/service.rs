@@ -144,6 +144,7 @@ mod tests {
             actions: vec![],
             extract: None,
             proxy_url: None,
+            webhook: None,
         };
 
         // We won't actually call scrape() here because it might fail due to no internet/browser

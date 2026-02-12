@@ -7,11 +7,13 @@ use axum::{
     Router,
 };
 use firecrawl_core::crawl::CrawlManager;
+use firecrawl_core::storage::Storage;
 use firecrawl_core::queue::redis::RedisQueue;
 use firecrawl_core::queue::{JobPayload, KickoffJobData, Queue};
 use firecrawl_core::scraper::service::ScrapeService;
 use firecrawl_core::scraper::{ScrapeOptions, ScrapeResult};
 use firecrawl_core::worker::Worker;
+use deadpool_redis::redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -44,7 +46,26 @@ async fn main() {
         RedisQueue::new(pool.clone()),
     );
 
-    let crawl_manager = Arc::new(CrawlManager::new(pool));
+    let database_url = std::env::var("DATABASE_URL").ok();
+    let storage = if let Some(url) = database_url {
+        let pg_pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&url)
+            .await
+            .expect("Failed to connect to Postgres");
+
+        // Run migrations
+        sqlx::migrate!("../../crates/firecrawl-core/migrations")
+            .run(&pg_pool)
+            .await
+            .expect("Failed to run migrations");
+
+        Some(Arc::new(Storage::new(pg_pool)))
+    } else {
+        None
+    };
+
+    let crawl_manager = Arc::new(CrawlManager::new(pool, storage));
 
     let app_state = Arc::new(AppState {
         scrape_service: scrape_service.clone(),
@@ -68,6 +89,7 @@ async fn main() {
                 .route("/scrape", post(scrape))
                 .route("/crawl", post(crawl))
                 .route("/crawl/:id", get(get_crawl_status))
+                .layer(middleware::from_fn_with_state(app_state.clone(), rate_limit))
                 .layer(middleware::from_fn(auth)),
         )
         .with_state(app_state);
@@ -81,6 +103,46 @@ async fn main() {
 
 async fn health() -> &'static str {
     "OK"
+}
+
+async fn rate_limit(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let api_key = req
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("anonymous");
+
+    let mut conn = state
+        .crawl_manager
+        .pool()
+        .get()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let key = format!("firecrawl:ratelimit:{}", api_key);
+
+    // Simple fixed window rate limiting: 100 requests per minute
+    let count: u32 = conn
+        .incr(&key, 1)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if count == 1 {
+        let _: () = conn
+            .expire(&key, 60)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    if count > 100 {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    Ok(next.run(req).await)
 }
 
 async fn auth(req: Request, next: Next) -> Result<Response, StatusCode> {

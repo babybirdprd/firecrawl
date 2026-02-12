@@ -49,3 +49,12 @@ The crawl configuration has been expanded to support `limit`, `max_depth`, `incl
 
 ### 15. Hybrid Proxy Support
 Proxy support is implemented using a hybrid approach: `HttpScraper` supports per-request proxies by creating lightweight `reqwest::Client` instances as needed, while `BrowserScraper` supports a global proxy configured at launch. This balances the need for flexible proxy rotation in simple scrapes with the resource constraints of maintaining a headless browser instance.
+
+### 16. Type-Safe Webhook System
+The webhook system uses a structured payload and event-based filtering. By leveraging Rust's `serde` for serialization and a dedicated `WebhookSender`, we ensure reliable and type-safe delivery of crawl events (started, page, completed). This re-architecture improves on the original by providing clear event schemas and decoupled delivery logic.
+
+### 17. Distributed Rate Limiting
+Rate limiting is implemented as a Redis-backed Axum middleware. This approach is idiomatic for a distributed system, ensuring that rate limits are enforced consistently across multiple API instances. Using Redis `INCR` and `EXPIRE` provides an atomic and efficient way to track request counts without the overhead of complex local state.
+
+### 18. Multi-Layered Persistence
+The storage architecture combines Redis for high-speed, real-time job orchestration and PostgreSQL for long-term persistence of crawl metadata and results. This separation of concerns allows the system to remain highly responsive during active crawls while ensuring that data is safely persisted for future retrieval, leveraging `sqlx` for asynchronous, non-blocking database interactions.

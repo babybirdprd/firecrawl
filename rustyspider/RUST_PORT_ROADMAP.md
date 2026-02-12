@@ -56,12 +56,12 @@ The migration will be performed in phases, prioritizing core functionality.
 ### Phase 5: API Implementation
 - [x] Implement `/scrape` endpoint (synchronous/async).
 - [x] Implement `/crawl` endpoints (asynchronous with enhanced configuration).
--   Integrate Auth and Rate Limiting middleware.
--   Database integration for job persistence.
+- [x] Integrate Auth and Rate Limiting middleware.
+- [x] Database integration for job persistence (PostgreSQL foundation).
 
 ### Phase 6: Polish & Features
 - [/] LLM Extraction logic (Trait-based extensible architecture implemented).
--   Webhook notifications.
+- [x] Webhook notifications (Crawl events: started, page, completed).
 - [/] Sitemap discovery (Enhanced discovery via `robots.txt` implemented).
 -   Deep research features.
 
